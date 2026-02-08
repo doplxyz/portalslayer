@@ -467,7 +467,9 @@ function wrapper(plugin_info) {
           html: html,
           title: 'Export Data (Fallback)',
           width: 'auto',
-          dialogClass: 'ui-dialog-portal-slayer-export'
+          dialogClass: 'ui-dialog-portal-slayer-export ui-dialog-portal-slayer',
+          position: { my: 'center', at: 'center', of: window },
+          draggable: true
         });
       } else {
         alert('Export failed. Copy data manually from console if possible.');
@@ -536,9 +538,12 @@ function wrapper(plugin_info) {
       const dialog = window.dialog({
         html: html,
         id: 'portal-slayer-list-dialog',
+        dialogClass: 'ui-dialog-portal-slayer',
         title: 'PortalSlayer List View',
         width: 'auto',
-        height: 'auto'
+        height: 'auto',
+        position: { my: 'center', at: 'center', of: window },
+        draggable: true
       });
 
       const tbody = $('#portal-slayer-list-body');
@@ -674,8 +679,11 @@ function wrapper(plugin_info) {
     window.dialog({
       html: html,
       id: 'plugin-portal-slayer-dialog',
+      dialogClass: 'ui-dialog-portal-slayer',
       title: 'PortalSlayer Options',
-      width: 'auto'
+      width: 'auto',
+      position: { my: 'center', at: 'center', of: window },
+      draggable: true
     });
 
     // イベントハンドラ
@@ -824,6 +832,28 @@ function wrapper(plugin_info) {
         .ps-controls button { padding: 6px; border: 1px solid #555; background: #222; color: #eee; cursor: pointer; }
         .ps-controls button.active { background: #600; border-color: #f00; }
         .ps-controls button.danger { color: #f88; border-color: #844; }
+
+        @media only screen and (max-width: 800px) {
+          .ui-dialog-portal-slayer {
+            max-width: 95% !important;
+            width: 95% !important;
+            left: 50% !important;
+            top: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            position: fixed !important;
+          }
+          .ui-dialog-portal-slayer .ui-dialog-titlebar {
+            padding: 12px 10px !important;
+          }
+          .ui-dialog-portal-slayer .ui-dialog-title {
+            font-size: 1.1em;
+            line-height: 1.2em;
+          }
+          .ui-dialog-portal-slayer .ui-dialog-content {
+            max-height: 70vh !important;
+            overflow-y: auto !important;
+          }
+        }
       `).appendTo('head');
     }
   };
