@@ -294,6 +294,37 @@ function wrapper(plugin_info) {
   // ============================================================
   // UI / 設定ダイアログ
   // ============================================================
+  S.exportData = function() {
+    const dataStr = JSON.stringify(S.data);
+    const blob = new Blob([dataStr], {type: "application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = "portal-slayer-data.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  S.importData = function(file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (confirm('Existing data will be overwritten. Continue?')) {
+          S.data = data;
+          S.saveData();
+          S.restoreAll();
+          alert('Import successful!');
+        }
+      } catch(e) {
+        alert('Error importing data: ' + e);
+      }
+    };
+    reader.readAsText(file);
+  };
+
   S.openSettings = function() {
     const html = `
       <div class="portal-slayer-settings">
@@ -304,6 +335,15 @@ function wrapper(plugin_info) {
              <div style="font-weight:bold; color:#ddd;">Label Options:</div>
              <div><label><input type="checkbox" id="ps-force-label" ${S.options.forceNameLabel ? 'checked' : ''}> 強制ラベル表示 (Portal Names OFFでも表示)</label></div>
              <div style="color:#888; font-size:11px; margin-left:16px;">※Portal Namesプラグイン連携: <label><input type="checkbox" id="ps-link-names" ${S.options.linkPortalNames ? 'checked' : ''} ${S.options.forceNameLabel ? 'disabled' : ''}> ON</label></div>
+           </div>
+
+           <div style="margin-top:8px; border-top:1px solid #444; padding-top:4px;">
+             <div style="font-weight:bold; color:#ddd;">Data Management:</div>
+             <div style="margin-top:4px;">
+               <button id="ps-btn-export">Export Data</button>
+               <button id="ps-btn-import" onclick="document.getElementById('ps-file-import').click()">Import Data</button>
+               <input type="file" id="ps-file-import" style="display:none" accept=".json">
+             </div>
            </div>
         </div>
 
@@ -376,6 +416,18 @@ function wrapper(plugin_info) {
       if(confirm('全てのマーカーを削除しますか？')) {
         S.clearAll();
       }
+    });
+
+    $('#ps-btn-export').on('click', function() {
+      S.exportData();
+    });
+
+    $('#ps-file-import').on('change', function(e) {
+      if (this.files && this.files[0]) {
+        S.importData(this.files[0]);
+      }
+      // Reset input so the same file can be selected again if needed
+      this.value = '';
     });
   };
 
