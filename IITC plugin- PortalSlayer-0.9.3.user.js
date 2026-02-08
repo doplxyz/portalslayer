@@ -2,8 +2,8 @@
 // @author         You
 // @name           IITC plugin: PortalSlayer
 // @category       d.org.addon
-// @version        0.9.2
-// @description    [0.9.2]Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。
+// @version        0.9.3
+// @description    [0.9.3]Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。
 // @id             portal-slayer
 // @namespace      https://example.com/
 // @include        https://intel.ingress.com/*
@@ -532,7 +532,7 @@ function wrapper(plugin_info) {
 }
 
 (function() {
-  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.1", "description": "Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。" } };
+  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.3", "description": "Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。" } };
   var script = document.createElement('script');
   script.appendChild(document.createTextNode('(' + wrapper + ')(' + JSON.stringify(info) + ');'));
   (document.body || document.head || document.documentElement).appendChild(script);
