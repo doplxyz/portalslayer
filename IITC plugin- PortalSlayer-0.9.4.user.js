@@ -2,8 +2,8 @@
 // @author         You
 // @name           IITC plugin: PortalSlayer
 // @category       d.org.addon
-// @version        0.9.3
-// @description    [0.9.3]Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。
+// @version        0.9.4
+// @description    [0.9.4]Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。
 // @id             portal-slayer
 // @namespace      https://example.com/
 // @include        https://intel.ingress.com/*
@@ -223,9 +223,12 @@ function wrapper(plugin_info) {
       if (d && d.lat && d.lng && d.color) {
         let title = d.title;
         // データ補完
-        if (!title && window.portals[guid] && window.portals[guid].options.data.title) {
-            title = window.portals[guid].options.data.title;
+        if (!title) {
+          const p = window.portals && window.portals[guid];
+          if (p && p.options && p.options.data && p.options.data.title) {
+            title = p.options.data.title;
             d.title = title;
+          }
         }
         S.drawMarker(guid, {lat: d.lat, lng: d.lng}, d.color, title);
       }
@@ -296,15 +299,52 @@ function wrapper(plugin_info) {
   // ============================================================
   S.exportData = function() {
     const dataStr = JSON.stringify(S.data);
-    const blob = new Blob([dataStr], {type: "application/json"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = "portal-slayer-data.json";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const fileName = 'portal-slayer-data.json';
+
+    try {
+      // Android / IITC Mobile native interface
+      if (typeof window.android !== 'undefined' && window.android && window.android.saveFile) {
+        window.android.saveFile(fileName, 'application/json', dataStr);
+        return;
+      }
+
+      // Generic IITC file saver helper (if available)
+      if (typeof window.saveFile === 'function') {
+        window.saveFile(dataStr, fileName, 'application/json');
+        return;
+      }
+
+      // Standard HTML5 Download (PC)
+      const blob = new Blob([dataStr], {type: "application/json"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+    } catch(e) {
+      console.error('Export failed:', e);
+      // Fallback: Show data in dialog
+      // Escape HTML to prevent breaking out of textarea
+      const safeData = dataStr.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const html = '<textarea style="width:100%; height:300px; font-family:monospace; box-sizing: border-box;" readonly>' + safeData + '</textarea>' +
+                   '<p style="margin-top:8px;">Copy the text above and save it to a file (e.g. portal-slayer-data.json).</p>';
+
+      if (typeof window.dialog === 'function') {
+        window.dialog({
+          html: html,
+          title: 'Export Data (Fallback)',
+          width: 'auto',
+          dialogClass: 'ui-dialog-portal-slayer-export'
+        });
+      } else {
+        alert('Export failed. Copy data manually from console if possible.');
+      }
+    }
   };
 
   S.importData = function(file) {
@@ -532,7 +572,7 @@ function wrapper(plugin_info) {
 }
 
 (function() {
-  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.3", "description": "Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。" } };
+  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.4", "description": "Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。" } };
   var script = document.createElement('script');
   script.appendChild(document.createTextNode('(' + wrapper + ')(' + JSON.stringify(info) + ');'));
   (document.body || document.head || document.documentElement).appendChild(script);
