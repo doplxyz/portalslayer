@@ -2,8 +2,8 @@
 // @author         You
 // @name           IITC plugin: PortalSlayer
 // @category       d.org.addon
-// @version        0.9.4
-// @description    [0.9.4]Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。
+// @version        0.9.5
+// @description    [0.9.5]Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。
 // @id             portal-slayer
 // @namespace      https://example.com/
 // @include        https://intel.ingress.com/*
@@ -66,11 +66,25 @@ function wrapper(plugin_info) {
   const DEFAULT_OPTS = {
     clearOnReload: false,
     linkPortalNames: true, // 従来のPortal Names連携
-    forceNameLabel: true   // 新機能: 強制的に名前を表示するか
+    forceNameLabel: true,  // 新機能: 強制的に名前を表示するか
+    keepMarkersOnZoom: false // 新機能: ズームアウト時にマーカーを保持するか
+  };
+
+  const DEFAULT_DATA = {
+    version: 1,
+    currentArea: 0,
+    areas: [
+      { name: 'Area1' },
+      { name: 'Area2' },
+      { name: 'Area3' },
+      { name: 'Area4' },
+      { name: 'Area5' }
+    ],
+    portals: {}
   };
 
   // 状態変数
-  S.data = {};
+  S.data = JSON.parse(JSON.stringify(DEFAULT_DATA));
   S.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   S.options = JSON.parse(JSON.stringify(DEFAULT_OPTS));
   S.layerGroup = null;
@@ -93,15 +107,40 @@ function wrapper(plugin_info) {
   S.loadData = function() {
     try {
       if (S.options.clearOnReload) {
-        S.data = {};
+        S.data = JSON.parse(JSON.stringify(DEFAULT_DATA));
         S.saveData();
       } else {
         const d = localStorage.getItem(KEY_DATA);
-        S.data = d ? JSON.parse(d) : {};
+        if (d) {
+          const parsed = JSON.parse(d);
+          // Check for legacy data (flat object without 'version' or 'portals')
+          if (!parsed.version && !parsed.portals) {
+            // Migrate legacy data to Area1
+            S.data = JSON.parse(JSON.stringify(DEFAULT_DATA));
+            const guids = Object.keys(parsed);
+            for (let i = 0; i < guids.length; i++) {
+              const guid = guids[i];
+              if (parsed[guid] && parsed[guid].lat) {
+                S.data.portals[guid] = parsed[guid];
+                S.data.portals[guid].areaIndex = 0; // Assign to Area1
+              }
+            }
+            S.saveData(); // Save migrated structure
+            console.log('PortalSlayer: Migrated legacy data to version 1');
+          } else {
+            // Load new structure
+            S.data = parsed;
+            // Ensure structure integrity (e.g. if new areas added in future)
+            if (!S.data.areas) S.data.areas = DEFAULT_DATA.areas;
+            if (S.data.currentArea === undefined) S.data.currentArea = 0;
+          }
+        } else {
+          S.data = JSON.parse(JSON.stringify(DEFAULT_DATA));
+        }
       }
     } catch(e) {
       console.error('Slayer loadData error', e);
-      S.data = {};
+      S.data = JSON.parse(JSON.stringify(DEFAULT_DATA));
     }
   };
 
@@ -131,8 +170,17 @@ function wrapper(plugin_info) {
 
     if (!S.layerGroup) {
       S.layerGroup = new L.LayerGroup();
+      // true = default visible
       window.addLayerGroup('Portal Slayer', S.layerGroup, true);
     }
+
+    // Zoom Fix: Ensure layer is on map if option is enabled
+    if (S.options.keepMarkersOnZoom) {
+       if (!window.map.hasLayer(S.layerGroup)) {
+           window.map.addLayer(S.layerGroup);
+       }
+    }
+
     return true;
   };
 
@@ -187,27 +235,65 @@ function wrapper(plugin_info) {
   };
 
   S.addPortal = function(guid, latlng, level, color, title) {
-    S.data[guid] = { lat: latlng.lat, lng: latlng.lng, level: level, color: color, title: title };
+    // S.data.portals に保存。現在のエリアIDを付与。
+    if (!S.data.portals) S.data.portals = {};
+
+    S.data.portals[guid] = {
+        lat: latlng.lat,
+        lng: latlng.lng,
+        level: level,
+        color: color,
+        title: title,
+        areaIndex: S.data.currentArea
+    };
     S.saveData();
     S.drawMarker(guid, latlng, color, title);
+
+    // Update List View if open
+    const listBody = $('#portal-slayer-list-body');
+    if (listBody.length) {
+        const existing = listBody.find(`tr[data-guid="${guid}"]`);
+        const p = S.data.portals[guid];
+        const newRow = S.createListRow(guid, p);
+        if (existing.length) {
+            existing.replaceWith(newRow);
+        } else {
+            listBody.append(newRow);
+        }
+    }
   };
 
   S.removePortal = function(guid) {
-    if (S.data[guid]) {
-      delete S.data[guid];
+    if (S.data.portals && S.data.portals[guid]) {
+      delete S.data.portals[guid];
       S.saveData();
     }
     if (S.guidToLayer[guid]) {
       S.layerGroup.removeLayer(S.guidToLayer[guid]);
       delete S.guidToLayer[guid];
     }
+    // Update List View if open
+    if ($('#portal-slayer-list-dialog').length > 0) {
+        // Simple refresh logic: re-open or remove row.
+        // For simplicity, remove row directly if possible
+        $(`tr[data-guid="${guid}"]`).remove();
+    }
   };
 
   S.clearAll = function() {
-    S.data = {};
+    // 全エリア削除にするか、カレントエリアのみにするか。
+    // 「全マーカー削除」というボタン名なので、全て消すのが自然だが、
+    // 誤操作防止のため確認ダイアログですべて消すことを明示する。
+
+    // Reset all portals
+    S.data.portals = {};
     S.saveData();
     if (S.layerGroup) S.layerGroup.clearLayers();
     S.guidToLayer = {};
+
+    if ($('#portal-slayer-list-dialog').length > 0) {
+        $('#portal-slayer-list-body').empty();
+    }
   };
 
   S.restoreAll = function() {
@@ -216,21 +302,31 @@ function wrapper(plugin_info) {
     S.layerGroup.clearLayers();
     S.guidToLayer = {};
 
-    const guids = Object.keys(S.data);
+    if (!S.data.portals) return;
+
+    const guids = Object.keys(S.data.portals);
     for (let i = 0; i < guids.length; i++) {
       const guid = guids[i];
-      const d = S.data[guid];
-      if (d && d.lat && d.lng && d.color) {
-        let title = d.title;
-        // データ補完
-        if (!title) {
-          const p = window.portals && window.portals[guid];
-          if (p && p.options && p.options.data && p.options.data.title) {
-            title = p.options.data.title;
-            d.title = title;
+      const d = S.data.portals[guid];
+
+      // Filter by Current Area
+      // If data has no areaIndex (legacy/error), assume 0 (Area1) or show in all?
+      // Migration logic sets it to 0.
+      const areaIdx = (d.areaIndex !== undefined) ? d.areaIndex : 0;
+
+      if (areaIdx === S.data.currentArea) {
+          if (d && d.lat && d.lng && d.color) {
+            let title = d.title;
+            // データ補完
+            if (!title) {
+              const p = window.portals && window.portals[guid];
+              if (p && p.options && p.options.data && p.options.data.title) {
+                title = p.options.data.title;
+                d.title = title;
+              }
+            }
+            S.drawMarker(guid, {lat: d.lat, lng: d.lng}, d.color, title);
           }
-        }
-        S.drawMarker(guid, {lat: d.lat, lng: d.lng}, d.color, title);
       }
     }
   };
@@ -246,11 +342,14 @@ function wrapper(plugin_info) {
 
         if (!S.options.linkPortalNames || S.options.forceNameLabel) return;
 
-        const guids = Object.keys(S.data);
+        if (!S.data.portals) return;
+        const guids = Object.keys(S.data.portals);
         for (let i = 0; i < guids.length; i++) {
           const guid = guids[i];
-          const d = S.data[guid];
-          if (d) {
+          const d = S.data.portals[guid];
+          const areaIdx = (d.areaIndex !== undefined) ? d.areaIndex : 0;
+
+          if (d && areaIdx === S.data.currentArea) {
              window.plugin.portalNames.addLabel(guid, { lat: d.lat, lng: d.lng });
           }
         }
@@ -266,7 +365,7 @@ function wrapper(plugin_info) {
     if (!guid) return;
 
     if (S.isDeleteMode) {
-      if (S.data[guid]) {
+      if (S.data.portals && S.data.portals[guid]) {
         S.removePortal(guid);
       }
       return;
@@ -287,8 +386,38 @@ function wrapper(plugin_info) {
     const title = detail ? detail.title : null;
 
     if (level > 0 && S.config[level] && S.config[level].active) {
-      const existing = S.data[guid];
-      if (!existing || existing.level !== level || existing.color !== S.config[level].color || (title && !existing.title)) {
+      const existing = S.data.portals ? S.data.portals[guid] : null;
+      // If it exists but in a DIFFERENT area, do we move it? Or duplicate?
+      // Logic: If it exists in CURRENT area, update. If not, add.
+      // If it exists in ANOTHER area, what happens?
+      // User requirement: "Switching area updates markers".
+      // It implies a portal can be in multiple areas? Or unique?
+      // "Check is selection type from menu screen" -> You select the active area.
+      // Usually, markers are unique per user-script unless specified.
+      // But if I want "Tokyo Station" in Area1 AND Area2, I'd need to switch to Area2 and tap it again.
+      // My data structure supports this (guid is key). Wait.
+      // If guid is key, a portal can only be in ONE area at a time.
+      // Refactoring consideration: S.data.portals[guid] = { ... areaIndex: 0 }.
+      // This means a portal can only belong to ONE area.
+      // If user wants same portal in multiple lists, I need a different structure (e.g. key by guid+area, or list of areas).
+      // Requirement: "Area1... Area5... separate management".
+      // "Check... selects current check area".
+      // Usually implies separate lists.
+      // If I move to Area2 and tap a portal already in Area1, should it move? Copy?
+      // Given "Area1, Area2...", it's likely distinct sets.
+      // If I use GUID as key, I can't have duplicates.
+      // Decision: Allow moving? Or just overwrite?
+      // Simple implementation: Overwrite (Move).
+      // If user wants it in both, they can't with `S.data.portals[guid]`.
+      // But for now, I'll stick to 1 portal = 1 area (last checked area).
+      // If they want to "Copy", they'd need a more complex UI.
+      // Let's assume 1 portal -> 1 area for simplicity unless specified "Multi-area per portal".
+      // Re-reading: "Marking management areas to be separated".
+      // If I tap in Area 1, it goes to Area 1.
+      // If I switch to Area 2 and tap same portal, it moves to Area 2?
+      // Probably yes.
+
+      if (!existing || existing.level !== level || existing.color !== S.config[level].color || (title && !existing.title) || existing.areaIndex !== S.data.currentArea) {
         S.addPortal(guid, p.getLatLng(), level, S.config[level].color, title);
       }
     }
@@ -329,7 +458,6 @@ function wrapper(plugin_info) {
     } catch(e) {
       console.error('Export failed:', e);
       // Fallback: Show data in dialog
-      // Escape HTML to prevent breaking out of textarea
       const safeData = dataStr.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       const html = '<textarea style="width:100%; height:300px; font-family:monospace; box-sizing: border-box;" readonly>' + safeData + '</textarea>' +
                    '<p style="margin-top:8px;">Copy the text above and save it to a file (e.g. portal-slayer-data.json).</p>';
@@ -353,7 +481,22 @@ function wrapper(plugin_info) {
       try {
         const data = JSON.parse(e.target.result);
         if (confirm('Existing data will be overwritten. Continue?')) {
-          S.data = data;
+          // Validate structure a bit?
+          if (data.portals || data.version) {
+              S.data = data;
+          } else {
+              // Legacy import?
+              // Wrap it
+              S.data = JSON.parse(JSON.stringify(DEFAULT_DATA));
+              const guids = Object.keys(data);
+                for (let i = 0; i < guids.length; i++) {
+                  const guid = guids[i];
+                  if (data[guid] && data[guid].lat) {
+                    S.data.portals[guid] = data[guid];
+                    S.data.portals[guid].areaIndex = 0;
+                  }
+                }
+          }
           S.saveData();
           S.restoreAll();
           alert('Import successful!');
@@ -365,21 +508,136 @@ function wrapper(plugin_info) {
     reader.readAsText(file);
   };
 
+  S.openListView = function() {
+      // Build List HTML
+      // Filters?
+      const html = `
+        <div class="ps-list-view">
+            <div class="ps-list-controls">
+                <input type="text" id="ps-list-search" placeholder="Search Portal Name..." style="width: 100%; box-sizing: border-box; padding: 4px;">
+            </div>
+            <div class="ps-list-container" style="max-height: 400px; overflow-y: auto; margin-top: 8px;">
+                <table id="ps-list-table" style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr>
+                            <th style="text-align: left;">Name</th>
+                            <th style="width: 40px;">Lvl</th>
+                            <th style="width: 60px;">Area</th>
+                            <th style="width: 50px;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="portal-slayer-list-body">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+      `;
+
+      const dialog = window.dialog({
+        html: html,
+        id: 'portal-slayer-list-dialog',
+        title: 'PortalSlayer List View',
+        width: 'auto',
+        height: 'auto'
+      });
+
+      const tbody = $('#portal-slayer-list-body');
+
+      if (!S.data.portals) return;
+
+      const guids = Object.keys(S.data.portals);
+      guids.forEach(guid => {
+         const p = S.data.portals[guid];
+         if (!p) return;
+         tbody.append(S.createListRow(guid, p));
+      });
+
+      // Filter Logic
+      $('#ps-list-search').on('input', function() {
+          const val = this.value.toLowerCase();
+          $('#portal-slayer-list-body tr').each(function() {
+             const text = $(this).find('.ps-list-name').text().toLowerCase();
+             if (text.indexOf(val) > -1) {
+                 $(this).show();
+             } else {
+                 $(this).hide();
+             }
+          });
+      });
+
+      // Jump Logic (Event Delegation)
+      $('#portal-slayer-list-body').on('click', '.ps-list-jump', function() {
+          const lat = $(this).data('lat');
+          const lng = $(this).data('lng');
+          window.map.setView([lat, lng], 15);
+      });
+  };
+
+  S.createListRow = function(guid, p) {
+      const areaName = S.data.areas[p.areaIndex || 0].name;
+      const title = p.title || 'Unknown';
+      const lvl = p.level || '?';
+
+      const row = $('<tr>').attr('data-guid', guid).css('border-bottom', '1px solid #444');
+
+      $('<td>').addClass('ps-list-name')
+               .css({ 'white-space': 'normal', 'word-break': 'break-all', 'padding': '4px' })
+               .text(title).appendTo(row);
+
+      $('<td>').css('text-align', 'center').text('P' + lvl).appendTo(row);
+
+      $('<td>').css({ 'text-align': 'center', 'font-size': '0.9em' }).text(areaName).appendTo(row);
+
+      const btnTd = $('<td>').css('text-align', 'center').appendTo(row);
+      $('<button>').addClass('ps-list-jump')
+                   .data('lat', p.lat)
+                   .data('lng', p.lng)
+                   .text('JUMP')
+                   .appendTo(btnTd);
+
+      return row;
+  };
+
   S.openSettings = function() {
+    const currentAreaIdx = S.data.currentArea || 0;
+    const areas = S.data.areas || DEFAULT_DATA.areas;
+
+    // Area Tabs HTML
+    let areaTabs = '<div class="ps-area-tabs" style="display:flex; gap:4px; margin-bottom:8px; flex-wrap:wrap;">';
+    areas.forEach((area, idx) => {
+        const isActive = (idx === currentAreaIdx);
+        areaTabs += `<button class="ps-area-tab ${isActive ? 'active' : ''}" data-idx="${idx}" style="flex:1; padding:4px; font-size:12px; border:1px solid #555; background:${isActive?'#004400':'#222'}; color:#eee;">${area.name}</button>`;
+    });
+    areaTabs += '</div>';
+
+    // Rename Control
+    const renameControl = `
+        <div style="margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+            <input type="text" id="ps-area-rename" value="${areas[currentAreaIdx].name}" style="flex:1; padding: 4px;">
+            <button id="ps-btn-rename">Rename Area</button>
+        </div>
+    `;
+
     const html = `
       <div class="portal-slayer-settings">
         <div class="ps-header">
+           <div style="font-weight:bold; color:#ddd; margin-bottom:4px;">Area Selection:</div>
+           ${areaTabs}
+           ${renameControl}
+
            <div><label><input type="checkbox" id="ps-clear-reload" ${S.options.clearOnReload ? 'checked' : ''}> リロードで全消去する</label></div>
 
            <div style="margin-top:8px; border-top:1px solid #444; padding-top:4px;">
              <div style="font-weight:bold; color:#ddd;">Label Options:</div>
              <div><label><input type="checkbox" id="ps-force-label" ${S.options.forceNameLabel ? 'checked' : ''}> 強制ラベル表示 (Portal Names OFFでも表示)</label></div>
+             <div><label><input type="checkbox" id="ps-keep-zoom" ${S.options.keepMarkersOnZoom ? 'checked' : ''}> ズームアウト時にマーカー保持 (負荷注意)</label></div>
              <div style="color:#888; font-size:11px; margin-left:16px;">※Portal Namesプラグイン連携: <label><input type="checkbox" id="ps-link-names" ${S.options.linkPortalNames ? 'checked' : ''} ${S.options.forceNameLabel ? 'disabled' : ''}> ON</label></div>
            </div>
 
            <div style="margin-top:8px; border-top:1px solid #444; padding-top:4px;">
              <div style="font-weight:bold; color:#ddd;">Data Management:</div>
-             <div style="margin-top:4px;">
+             <div style="margin-top:4px; display:flex; flex-wrap:wrap; gap:4px;">
+               <button id="ps-btn-list-view" style="font-weight:bold;">List View</button>
                <button id="ps-btn-export">Export Data</button>
                <button id="ps-btn-import" onclick="document.getElementById('ps-file-import').click()">Import Data</button>
                <input type="file" id="ps-file-import" style="display:none" accept=".json">
@@ -408,7 +666,7 @@ function wrapper(plugin_info) {
         </table>
         <div class="ps-controls">
           <button id="ps-btn-delete-mode" class="${S.isDeleteMode ? 'active' : ''}">${S.isDeleteMode ? '削除モード中 (Mapタップ)' : '削除モード OFF'}</button>
-          <button id="ps-btn-clear-all" class="danger">全マーカー削除</button>
+          <button id="ps-btn-clear-all" class="danger">全マーカー削除 (全エリア)</button>
         </div>
       </div>
     `;
@@ -421,6 +679,32 @@ function wrapper(plugin_info) {
     });
 
     // イベントハンドラ
+    // Area Switching
+    $('.ps-area-tab').on('click', function() {
+        const idx = $(this).data('idx');
+        if (S.data.currentArea !== idx) {
+            S.data.currentArea = idx;
+            S.saveData();
+            // Redraw UI to update tabs and rename input
+            $('#plugin-portal-slayer-dialog').dialog('close');
+            S.openSettings();
+            // Redraw Markers
+            S.restoreAll();
+        }
+    });
+
+    // Rename Area
+    $('#ps-btn-rename').on('click', function() {
+        const newName = $('#ps-area-rename').val();
+        if (newName) {
+            S.data.areas[S.data.currentArea].name = newName;
+            S.saveData();
+            // Refresh Tabs
+            $('#plugin-portal-slayer-dialog').dialog('close');
+            S.openSettings();
+        }
+    });
+
     $('#ps-clear-reload').on('change', function() { S.options.clearOnReload = this.checked; S.saveSettings(); });
 
     $('#ps-force-label').on('change', function() {
@@ -428,6 +712,12 @@ function wrapper(plugin_info) {
         $('#ps-link-names').prop('disabled', this.checked);
         S.saveSettings();
         S.restoreAll();
+    });
+
+    $('#ps-keep-zoom').on('change', function() {
+        S.options.keepMarkersOnZoom = this.checked;
+        S.saveSettings();
+        S.ensureInfra();
     });
 
     $('#ps-link-names').on('change', function() { S.options.linkPortalNames = this.checked; S.saveSettings(); });
@@ -453,13 +743,17 @@ function wrapper(plugin_info) {
     });
 
     $('#ps-btn-clear-all').on('click', function() {
-      if(confirm('全てのマーカーを削除しますか？')) {
+      if(confirm('警告: 全てのエリアの全てのマーカーを削除しますか？')) {
         S.clearAll();
       }
     });
 
     $('#ps-btn-export').on('click', function() {
       S.exportData();
+    });
+
+    $('#ps-btn-list-view').on('click', function() {
+        S.openListView();
     });
 
     $('#ps-file-import').on('change', function(e) {
@@ -554,6 +848,13 @@ function wrapper(plugin_info) {
           window.removeHook('portalSelected', S.onPortalSelected);
           window.addHook('portalSelected', S.onPortalSelected);
 
+          // Zoom/Move End Hook to ensure layer persistence if enabled
+          window.map.on('zoomend moveend', function() {
+             if (S.options.keepMarkersOnZoom) {
+                 S.ensureInfra();
+             }
+          });
+
           setTimeout(S.setupPortalNamesHook, 1000);
 
           clearInterval(initMap);
@@ -572,7 +873,7 @@ function wrapper(plugin_info) {
 }
 
 (function() {
-  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.4", "description": "Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。" } };
+  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.5", "description": "Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。" } };
   var script = document.createElement('script');
   script.appendChild(document.createTextNode('(' + wrapper + ')(' + JSON.stringify(info) + ');'));
   (document.body || document.head || document.documentElement).appendChild(script);
