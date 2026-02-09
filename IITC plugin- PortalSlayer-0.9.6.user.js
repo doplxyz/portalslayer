@@ -229,7 +229,11 @@ function wrapper(plugin_info) {
     // 従来のPortal Names連携
     if (S.options.linkPortalNames && !S.options.forceNameLabel) {
       if (window.plugin.portalNames && window.plugin.portalNames.addLabel) {
-        window.plugin.portalNames.addLabel(guid, latlng);
+        try {
+          window.plugin.portalNames.addLabel(guid, latlng);
+        } catch(e) {
+          console.error('Portal Names integration error:', e);
+        }
       }
     }
   };
@@ -306,27 +310,33 @@ function wrapper(plugin_info) {
 
     const guids = Object.keys(S.data.portals);
     for (let i = 0; i < guids.length; i++) {
-      const guid = guids[i];
-      const d = S.data.portals[guid];
+      try {
+        const guid = guids[i];
+        const d = S.data.portals[guid];
 
-      // Filter by Current Area
-      // If data has no areaIndex (legacy/error), assume 0 (Area1) or show in all?
-      // Migration logic sets it to 0.
-      const areaIdx = (d.areaIndex !== undefined) ? d.areaIndex : 0;
+        // Filter by Current Area
+        // If data has no areaIndex (legacy/error), assume 0 (Area1) or show in all?
+        // Migration logic sets it to 0.
+        const areaIdx = (d.areaIndex !== undefined) ? d.areaIndex : 0;
 
-      if (areaIdx === S.data.currentArea) {
-          if (d && d.lat && d.lng && d.color) {
-            let title = d.title;
-            // データ補完
-            if (!title) {
-              const p = window.portals && window.portals[guid];
-              if (p && p.options && p.options.data && p.options.data.title) {
-                title = p.options.data.title;
-                d.title = title;
+        // Ensure robust comparison (handle string vs number)
+        // eslint-disable-next-line eqeqeq
+        if (areaIdx == S.data.currentArea) {
+            if (d && d.lat && d.lng && d.color) {
+              let title = d.title;
+              // データ補完
+              if (!title) {
+                const p = window.portals && window.portals[guid];
+                if (p && p.options && p.options.data && p.options.data.title) {
+                  title = p.options.data.title;
+                  d.title = title;
+                }
               }
+              S.drawMarker(guid, {lat: d.lat, lng: d.lng}, d.color, title);
             }
-            S.drawMarker(guid, {lat: d.lat, lng: d.lng}, d.color, title);
-          }
+        }
+      } catch (e) {
+        console.error('Slayer restoreAll error for item', e);
       }
     }
   };
@@ -499,6 +509,12 @@ function wrapper(plugin_info) {
                   }
                 }
           }
+
+          // Ensure data integrity
+          if (!S.data.areas) S.data.areas = JSON.parse(JSON.stringify(DEFAULT_DATA.areas));
+          if (S.data.currentArea === undefined) S.data.currentArea = 0;
+          if (!S.data.portals) S.data.portals = {};
+
           S.saveData();
           S.restoreAll();
           alert('Import successful!');
