@@ -2,8 +2,8 @@
 // @author         You
 // @name           IITC plugin: PortalSlayer
 // @category       d.org.addon
-// @version        0.9.8
-// @description    [0.9.8]Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。
+// @version        0.9.9
+// @description    [0.9.9]Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。ズームレベル表示・ズーム別表示機能追加。
 // @id             portal-slayer
 // @namespace      https://example.com/
 // @include        https://intel.ingress.com/*
@@ -49,14 +49,14 @@ function wrapper(plugin_info) {
   // デフォルト設定
   const DEFAULT_CONFIG = {
     // レベル設定
-    1: { active: false, color: '#CCCCCC' },
-    2: { active: false, color: '#CCCCCC' },
-    3: { active: false, color: '#CCCCCC' },
-    4: { active: false, color: '#CCCCCC' },
-    5: { active: false, color: '#CCCCCC' },
-    6: { active: false, color: '#CCCCCC' },
-    7: { active: true,  color: '#FFFF00' }, // 黄色
-    8: { active: true,  color: '#FF0000' }, // 赤色
+    1: { active: false, color: '#CCCCCC', minZoom: 0, maxZoom: 21 },
+    2: { active: false, color: '#CCCCCC', minZoom: 0, maxZoom: 21 },
+    3: { active: false, color: '#CCCCCC', minZoom: 0, maxZoom: 21 },
+    4: { active: false, color: '#CCCCCC', minZoom: 0, maxZoom: 21 },
+    5: { active: false, color: '#CCCCCC', minZoom: 0, maxZoom: 21 },
+    6: { active: false, color: '#CCCCCC', minZoom: 0, maxZoom: 21 },
+    7: { active: true,  color: '#FFFF00', minZoom: 0, maxZoom: 21 }, // 黄色
+    8: { active: true,  color: '#FF0000', minZoom: 0, maxZoom: 21 }, // 赤色
 
     // 陣営設定 (trueなら対象にする)
     processEnl: true,
@@ -101,7 +101,16 @@ function wrapper(plugin_info) {
   S.loadSettings = function() {
     try {
       const c = localStorage.getItem(KEY_CONFIG);
-      if (c) S.config = { ...DEFAULT_CONFIG, ...JSON.parse(c) };
+      if (c) {
+        const parsed = JSON.parse(c);
+        S.config = { ...DEFAULT_CONFIG, ...parsed };
+        // Deep merge level settings to ensure new defaults (minZoom/maxZoom) apply
+        for (let i = 1; i <= 8; i++) {
+          if (S.config[i] && DEFAULT_CONFIG[i]) {
+             S.config[i] = { ...DEFAULT_CONFIG[i], ...S.config[i] };
+          }
+        }
+      }
 
       const o = localStorage.getItem(KEY_OPTS);
       if (o) {
@@ -349,7 +358,21 @@ function wrapper(plugin_info) {
         const p = S.data.portals[guid];
         if (!p) return;
 
-        const isForceShown = viewLevels[p.level];
+        // Zoom Range Override
+        let isForceShownByZoom = false;
+        const conf = S.config[p.level];
+        if (conf) {
+            const minZ = conf.minZoom;
+            const maxZ = conf.maxZoom;
+            // Check if override is enabled (values are present)
+            if (minZ !== undefined && maxZ !== undefined && minZ !== null && maxZ !== null) {
+                if (zoom >= minZ && zoom <= maxZ) {
+                    isForceShownByZoom = true;
+                }
+            }
+        }
+
+        const isForceShown = viewLevels[p.level] || isForceShownByZoom;
         const isZoomAllowed = minLinkLength <= viewDistance;
 
         if (isForceShown || isZoomAllowed) {
@@ -755,7 +778,7 @@ function wrapper(plugin_info) {
         </div>
 
         <table class="ps-level-table">
-          <tr><th>Lvl</th><th>Auto</th><th>Color</th></tr>
+          <tr><th>Lvl</th><th>Auto</th><th>Color</th><th>Min Zoom</th><th>Max Zoom</th></tr>
           ${[1,2,3,4,5,6,7,8].map(lvl => {
             const c = S.config[lvl];
             return `
@@ -763,6 +786,8 @@ function wrapper(plugin_info) {
                 <td>L${lvl}</td>
                 <td><input type="checkbox" class="ps-lvl-check" data-lvl="${lvl}" ${c.active ? 'checked' : ''}></td>
                 <td><input type="color" class="ps-lvl-color" data-lvl="${lvl}" value="${c.color}"></td>
+                <td><input type="number" class="ps-lvl-min" data-lvl="${lvl}" value="${c.minZoom !== undefined ? c.minZoom : ''}" style="width:50px"></td>
+                <td><input type="number" class="ps-lvl-max" data-lvl="${lvl}" value="${c.maxZoom !== undefined ? c.maxZoom : ''}" style="width:50px"></td>
               </tr>
             `;
           }).join('')}
@@ -853,6 +878,21 @@ function wrapper(plugin_info) {
       S.saveSettings();
     });
 
+    $('.ps-lvl-min').on('change', function() {
+      const lvl = $(this).data('lvl');
+      const val = parseInt(this.value, 10);
+      S.config[lvl].minZoom = isNaN(val) ? undefined : val;
+      S.saveSettings();
+      S.updateVisibility();
+    });
+    $('.ps-lvl-max').on('change', function() {
+      const lvl = $(this).data('lvl');
+      const val = parseInt(this.value, 10);
+      S.config[lvl].maxZoom = isNaN(val) ? undefined : val;
+      S.saveSettings();
+      S.updateVisibility();
+    });
+
     $('#ps-btn-delete-mode').on('click', function() {
       S.toggleDeleteMode();
       $(this).text(S.isDeleteMode ? '削除モード中 (Mapタップ)' : '削除モード OFF');
@@ -902,6 +942,23 @@ function wrapper(plugin_info) {
     $('#toolbox').append('<a id="ps-toolbox-link" onclick="window.plugin.portalSlayer.openSettings();return false;">PortalSlayer</a>');
   }
 
+  S.setupZoomDisplay = function() {
+    if ($('#portal-slayer-zoom-display').length === 0) {
+      $('<div>')
+        .prop('id', 'portal-slayer-zoom-display')
+        .appendTo('body');
+    }
+
+    const updateZoom = function() {
+       if (window.map) {
+         $('#portal-slayer-zoom-display').text('ZoomLv: ' + window.map.getZoom());
+       }
+    };
+
+    updateZoom();
+    window.map.on('zoomend', updateZoom);
+  };
+
   S.setupCSS = function() {
     if ($('#portal-slayer-css').length === 0) {
       $('<style>').prop('id', 'portal-slayer-css').prop('type', 'text/css').html(`
@@ -947,6 +1004,20 @@ function wrapper(plugin_info) {
         .ps-controls button { padding: 6px; border: 1px solid #555; background: #222; color: #eee; cursor: pointer; }
         .ps-controls button.active { background: #600; border-color: #f00; }
         .ps-controls button.danger { color: #f88; border-color: #844; }
+
+        #portal-slayer-zoom-display {
+          position: fixed;
+          bottom: 2px;
+          right: 2px;
+          background: rgba(0,0,0,0.5);
+          color: #FFF;
+          padding: 2px 5px;
+          border-radius: 4px;
+          font-size: 10px;
+          pointer-events: none;
+          z-index: 6000;
+          font-family: monospace;
+        }
 
         @media only screen and (max-width: 800px) {
           .ui-dialog-portal-slayer {
@@ -998,6 +1069,8 @@ function wrapper(plugin_info) {
              S.updateVisibility();
           });
 
+          S.setupZoomDisplay();
+
           setTimeout(S.setupPortalNamesHook, 1000);
 
           clearInterval(initMap);
@@ -1016,7 +1089,7 @@ function wrapper(plugin_info) {
 }
 
 (function() {
-  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.8", "description": "Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。" } };
+  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.9", "description": "Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。ズームレベル表示・ズーム別表示機能追加。" } };
   var script = document.createElement('script');
   script.appendChild(document.createTextNode('(' + wrapper + ')(' + JSON.stringify(info) + ');'));
   (document.body || document.head || document.documentElement).appendChild(script);
