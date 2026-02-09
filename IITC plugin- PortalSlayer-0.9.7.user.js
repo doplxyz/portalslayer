@@ -2,8 +2,8 @@
 // @author         You
 // @name           IITC plugin: PortalSlayer
 // @category       d.org.addon
-// @version        0.9.7
-// @description    [0.9.7]Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。
+// @version        0.9.8
+// @description    [0.9.8]Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。
 // @id             portal-slayer
 // @namespace      https://example.com/
 // @include        https://intel.ingress.com/*
@@ -67,7 +67,11 @@ function wrapper(plugin_info) {
     clearOnReload: false,
     linkPortalNames: true, // 従来のPortal Names連携
     forceNameLabel: true,  // 新機能: 強制的に名前を表示するか
-    keepMarkersOnZoom: false // 新機能: ズームアウト時にマーカーを保持するか
+    viewDistance: 1000,    // 新機能: 描画距離(m)
+    viewLevels: {          // 新機能: ズームアウト時も表示するレベル
+      1: false, 2: false, 3: false, 4: false,
+      5: false, 6: false, 7: false, 8: true
+    }
   };
 
   const DEFAULT_DATA = {
@@ -100,7 +104,21 @@ function wrapper(plugin_info) {
       if (c) S.config = { ...DEFAULT_CONFIG, ...JSON.parse(c) };
 
       const o = localStorage.getItem(KEY_OPTS);
-      if (o) S.options = { ...DEFAULT_OPTS, ...JSON.parse(o) };
+      if (o) {
+        const parsed = JSON.parse(o);
+        S.options = { ...DEFAULT_OPTS, ...parsed };
+        // Deep merge or default for nested objects
+        if (!S.options.viewLevels) {
+            S.options.viewLevels = JSON.parse(JSON.stringify(DEFAULT_OPTS.viewLevels));
+        } else {
+            // Ensure all levels exist if partial object loaded
+            S.options.viewLevels = { ...DEFAULT_OPTS.viewLevels, ...S.options.viewLevels };
+        }
+        if (typeof S.options.viewDistance === 'undefined') S.options.viewDistance = 1000;
+
+        // Remove legacy
+        delete S.options.keepMarkersOnZoom;
+      }
     } catch(e) { console.error('Slayer loadSettings error', e); }
   };
 
@@ -172,13 +190,6 @@ function wrapper(plugin_info) {
       S.layerGroup = new L.LayerGroup();
       // true = default visible
       window.addLayerGroup('Portal Slayer', S.layerGroup, true);
-    }
-
-    // Zoom Fix: Ensure layer is on map if option is enabled
-    if (S.options.keepMarkersOnZoom) {
-       if (!window.map.hasLayer(S.layerGroup)) {
-           window.map.addLayer(S.layerGroup);
-       }
     }
 
     return true;
@@ -284,11 +295,29 @@ function wrapper(plugin_info) {
     }
   };
 
-  S.clearAll = function() {
-    // 全エリア削除にするか、カレントエリアのみにするか。
-    // 「全マーカー削除」というボタン名なので、全て消すのが自然だが、
-    // 誤操作防止のため確認ダイアログですべて消すことを明示する。
+  S.clearCurrentArea = function() {
+    if (!S.data.portals) return;
+    const guids = Object.keys(S.data.portals);
+    let changed = false;
+    guids.forEach(guid => {
+        if (S.data.portals[guid].areaIndex === S.data.currentArea) {
+            delete S.data.portals[guid];
+            if (S.guidToLayer[guid]) {
+                S.layerGroup.removeLayer(S.guidToLayer[guid]);
+                delete S.guidToLayer[guid];
+            }
+            changed = true;
+        }
+    });
+    if (changed) {
+        S.saveData();
+        if ($('#portal-slayer-list-dialog').length > 0) {
+            S.openListView();
+        }
+    }
+  };
 
+  S.clearAll = function() {
     // Reset all portals
     S.data.portals = {};
     S.saveData();
@@ -297,6 +326,49 @@ function wrapper(plugin_info) {
 
     if ($('#portal-slayer-list-dialog').length > 0) {
         $('#portal-slayer-list-body').empty();
+    }
+  };
+
+  S.updateVisibility = function() {
+    if (!S.layerGroup) return;
+
+    // Safety check for IITC function
+    if (typeof window.getMapZoomTileParameters !== 'function') return;
+
+    const zoom = window.map.getZoom();
+    const params = window.getMapZoomTileParameters(zoom);
+    const minLinkLength = params.minLinkLength || 0;
+    const viewDistance = S.options.viewDistance || 1000;
+    const viewLevels = S.options.viewLevels || {};
+
+    const guids = Object.keys(S.guidToLayer);
+    let hasVisible = false;
+
+    guids.forEach(guid => {
+        const marker = S.guidToLayer[guid];
+        const p = S.data.portals[guid];
+        if (!p) return;
+
+        const isForceShown = viewLevels[p.level];
+        const isZoomAllowed = minLinkLength <= viewDistance;
+
+        if (isForceShown || isZoomAllowed) {
+            if (!S.layerGroup.hasLayer(marker)) {
+                S.layerGroup.addLayer(marker);
+            }
+            hasVisible = true;
+        } else {
+            if (S.layerGroup.hasLayer(marker)) {
+                S.layerGroup.removeLayer(marker);
+            }
+        }
+    });
+
+    // Ensure layer is on map if ANY marker is visible
+    if (hasVisible) {
+        if (!window.map.hasLayer(S.layerGroup)) {
+             window.map.addLayer(S.layerGroup);
+        }
     }
   };
 
@@ -339,6 +411,7 @@ function wrapper(plugin_info) {
         console.error('Slayer restoreAll error for item', e);
       }
     }
+    S.updateVisibility();
   };
 
   // ============================================================
@@ -651,8 +724,17 @@ function wrapper(plugin_info) {
            <div style="margin-top:8px; border-top:1px solid #444; padding-top:4px;">
              <div style="font-weight:bold; color:#ddd;">Label Options:</div>
              <div><label><input type="checkbox" id="ps-force-label" ${S.options.forceNameLabel ? 'checked' : ''}> 強制ラベル表示 (Portal Names OFFでも表示)</label></div>
-             <div><label><input type="checkbox" id="ps-keep-zoom" ${S.options.keepMarkersOnZoom ? 'checked' : ''}> ズームアウト時にマーカー保持 (負荷注意)</label></div>
              <div style="color:#888; font-size:11px; margin-left:16px;">※Portal Namesプラグイン連携: <label><input type="checkbox" id="ps-link-names" ${S.options.linkPortalNames ? 'checked' : ''} ${S.options.forceNameLabel ? 'disabled' : ''}> ON</label></div>
+           </div>
+
+           <div style="margin-top:8px; border-top:1px solid #444; padding-top:4px;">
+             <div style="font-weight:bold; color:#ddd;">PortalViewDistance:</div>
+             <div style="margin-bottom:4px;">
+               Drawing distance [ <input type="number" id="ps-view-distance" value="${S.options.viewDistance || 1000}" style="width:60px;"> m ]
+             </div>
+             <div style="display:flex; flex-wrap:wrap; gap:8px;">
+               ${[1,2,3,4,5,6,7,8].map(l => `<label><input type="checkbox" class="ps-view-lvl" data-lvl="${l}" ${S.options.viewLevels[l]?'checked':''}> Lv${l}</label>`).join('')}
+             </div>
            </div>
 
            <div style="margin-top:8px; border-top:1px solid #444; padding-top:4px;">
@@ -687,7 +769,10 @@ function wrapper(plugin_info) {
         </table>
         <div class="ps-controls">
           <button id="ps-btn-delete-mode" class="${S.isDeleteMode ? 'active' : ''}">${S.isDeleteMode ? '削除モード中 (Mapタップ)' : '削除モード OFF'}</button>
-          <button id="ps-btn-clear-all" class="danger">全マーカー削除 (全エリア)</button>
+          <div style="display:flex; gap:4px;">
+            <button id="ps-btn-clear-current" class="danger" style="flex:1;">削除 (選択エリアのみ)</button>
+            <button id="ps-btn-clear-all" class="danger" style="flex:1;">全削除 (全エリア)</button>
+          </div>
         </div>
       </div>
     `;
@@ -738,10 +823,18 @@ function wrapper(plugin_info) {
         S.restoreAll();
     });
 
-    $('#ps-keep-zoom').on('change', function() {
-        S.options.keepMarkersOnZoom = this.checked;
+    $('#ps-view-distance').on('change', function() {
+        const val = parseInt(this.value, 10);
+        S.options.viewDistance = isNaN(val) ? 1000 : val;
         S.saveSettings();
-        S.ensureInfra();
+        S.updateVisibility();
+    });
+
+    $('.ps-view-lvl').on('change', function() {
+        const lvl = $(this).data('lvl');
+        S.options.viewLevels[lvl] = this.checked;
+        S.saveSettings();
+        S.updateVisibility();
     });
 
     $('#ps-link-names').on('change', function() { S.options.linkPortalNames = this.checked; S.saveSettings(); });
@@ -764,6 +857,12 @@ function wrapper(plugin_info) {
       S.toggleDeleteMode();
       $(this).text(S.isDeleteMode ? '削除モード中 (Mapタップ)' : '削除モード OFF');
       $(this).toggleClass('active', S.isDeleteMode);
+    });
+
+    $('#ps-btn-clear-current').on('click', function() {
+      if(confirm('警告: 選択中のエリアのマーカーを全て削除しますか？')) {
+        S.clearCurrentArea();
+      }
     });
 
     $('#ps-btn-clear-all').on('click', function() {
@@ -894,11 +993,9 @@ function wrapper(plugin_info) {
           window.removeHook('portalSelected', S.onPortalSelected);
           window.addHook('portalSelected', S.onPortalSelected);
 
-          // Zoom/Move End Hook to ensure layer persistence if enabled
-          window.map.on('zoomend moveend', function() {
-             if (S.options.keepMarkersOnZoom) {
-                 S.ensureInfra();
-             }
+          // Zoom End Hook to update visibility
+          window.map.on('zoomend', function() {
+             S.updateVisibility();
           });
 
           setTimeout(S.setupPortalNamesHook, 1000);
@@ -919,7 +1016,7 @@ function wrapper(plugin_info) {
 }
 
 (function() {
-  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.7", "description": "Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。" } };
+  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.8", "description": "Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。" } };
   var script = document.createElement('script');
   script.appendChild(document.createTextNode('(' + wrapper + ')(' + JSON.stringify(info) + ');'));
   (document.body || document.head || document.documentElement).appendChild(script);
