@@ -2,8 +2,8 @@
 // @author         You
 // @name           IITC plugin: PortalSlayer
 // @category       d.org.addon
-// @version        0.9.21
-// @description    [0.9.21] Faction-based Portal Counter
+// @version        0.9.22
+// @description    [0.9.22] Faction-based Portal Counter
 // @id             portal-slayer
 // @namespace      https://example.com/
 // @include        https://intel.ingress.com/*
@@ -711,7 +711,7 @@ function wrapper(plugin_info) {
              <div style="color:#f88; font-size:11px; margin-bottom:4px;">注意⚠️非COREユーザの場合アクセス規制されやすいです</div>
 
              <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-               <label style="flex:1;">動作モード選択:</label>
+               <label style="flex:1;">動作モード(要リロード):</label>
                <select id="ps-expert-preset" style="flex:1;">
                  ${presetOptions}
                </select>
@@ -1070,7 +1070,7 @@ function wrapper(plugin_info) {
 }
 
 (function() {
-  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.21", "description": "[0.9.21] Faction-based Portal Counter" } };
+  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.22", "description": "[0.9.22] Faction-based Portal Counter" } };
   var script = document.createElement('script');
   script.appendChild(document.createTextNode('(' + wrapper + ')(' + JSON.stringify(info) + ');'));
   (document.body || document.head || document.documentElement).appendChild(script);
