@@ -2,8 +2,8 @@
 // @author         You
 // @name           IITC plugin: PortalSlayer
 // @category       d.org.addon
-// @version        0.9.9
-// @description    [0.9.9]Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。ズームレベル表示・ズーム別表示機能追加。
+// @version        0.9.10
+// @description    [0.9.10]Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。ズームレベル表示位置修正・描画距離設定削除。
 // @id             portal-slayer
 // @namespace      https://example.com/
 // @include        https://intel.ingress.com/*
@@ -66,12 +66,7 @@ function wrapper(plugin_info) {
   const DEFAULT_OPTS = {
     clearOnReload: false,
     linkPortalNames: true, // 従来のPortal Names連携
-    forceNameLabel: true,  // 新機能: 強制的に名前を表示するか
-    viewDistance: 1000,    // 新機能: 描画距離(m)
-    viewLevels: {          // 新機能: ズームアウト時も表示するレベル
-      1: false, 2: false, 3: false, 4: false,
-      5: false, 6: false, 7: false, 8: true
-    }
+    forceNameLabel: true   // 新機能: 強制的に名前を表示するか
   };
 
   const DEFAULT_DATA = {
@@ -116,17 +111,10 @@ function wrapper(plugin_info) {
       if (o) {
         const parsed = JSON.parse(o);
         S.options = { ...DEFAULT_OPTS, ...parsed };
-        // Deep merge or default for nested objects
-        if (!S.options.viewLevels) {
-            S.options.viewLevels = JSON.parse(JSON.stringify(DEFAULT_OPTS.viewLevels));
-        } else {
-            // Ensure all levels exist if partial object loaded
-            S.options.viewLevels = { ...DEFAULT_OPTS.viewLevels, ...S.options.viewLevels };
-        }
-        if (typeof S.options.viewDistance === 'undefined') S.options.viewDistance = 1000;
-
         // Remove legacy
         delete S.options.keepMarkersOnZoom;
+        delete S.options.viewDistance;
+        delete S.options.viewLevels;
       }
     } catch(e) { console.error('Slayer loadSettings error', e); }
   };
@@ -340,16 +328,9 @@ function wrapper(plugin_info) {
 
   S.updateVisibility = function() {
     if (!S.layerGroup) return;
-
-    // Safety check for IITC function
-    if (typeof window.getMapZoomTileParameters !== 'function') return;
+    if (!window.map) return;
 
     const zoom = window.map.getZoom();
-    const params = window.getMapZoomTileParameters(zoom);
-    const minLinkLength = params.minLinkLength || 0;
-    const viewDistance = S.options.viewDistance || 1000;
-    const viewLevels = S.options.viewLevels || {};
-
     const guids = Object.keys(S.guidToLayer);
     let hasVisible = false;
 
@@ -358,24 +339,22 @@ function wrapper(plugin_info) {
         const p = S.data.portals[guid];
         if (!p) return;
 
-        // Zoom Range Override
-        let isForceShownByZoom = false;
+        // Visibility determined exclusively by Min/Max Zoom configuration
+        let isVisible = true; // Default to visible if no config or undefined range (e.g. user cleared inputs)
+
         const conf = S.config[p.level];
         if (conf) {
             const minZ = conf.minZoom;
             const maxZ = conf.maxZoom;
-            // Check if override is enabled (values are present)
+            // If range is defined, check it.
             if (minZ !== undefined && maxZ !== undefined && minZ !== null && maxZ !== null) {
-                if (zoom >= minZ && zoom <= maxZ) {
-                    isForceShownByZoom = true;
+                if (zoom < minZ || zoom > maxZ) {
+                    isVisible = false;
                 }
             }
         }
 
-        const isForceShown = viewLevels[p.level] || isForceShownByZoom;
-        const isZoomAllowed = minLinkLength <= viewDistance;
-
-        if (isForceShown || isZoomAllowed) {
+        if (isVisible) {
             if (!S.layerGroup.hasLayer(marker)) {
                 S.layerGroup.addLayer(marker);
             }
@@ -751,16 +730,6 @@ function wrapper(plugin_info) {
            </div>
 
            <div style="margin-top:8px; border-top:1px solid #444; padding-top:4px;">
-             <div style="font-weight:bold; color:#ddd;">PortalViewDistance:</div>
-             <div style="margin-bottom:4px;">
-               Drawing distance [ <input type="number" id="ps-view-distance" value="${S.options.viewDistance || 1000}" style="width:60px;"> m ]
-             </div>
-             <div style="display:flex; flex-wrap:wrap; gap:8px;">
-               ${[1,2,3,4,5,6,7,8].map(l => `<label><input type="checkbox" class="ps-view-lvl" data-lvl="${l}" ${S.options.viewLevels[l]?'checked':''}> Lv${l}</label>`).join('')}
-             </div>
-           </div>
-
-           <div style="margin-top:8px; border-top:1px solid #444; padding-top:4px;">
              <div style="font-weight:bold; color:#ddd;">Data Management:</div>
              <div style="margin-top:4px; display:flex; flex-wrap:wrap; gap:4px;">
                <button id="ps-btn-list-view" style="font-weight:bold;">List View</button>
@@ -846,20 +815,6 @@ function wrapper(plugin_info) {
         $('#ps-link-names').prop('disabled', this.checked);
         S.saveSettings();
         S.restoreAll();
-    });
-
-    $('#ps-view-distance').on('change', function() {
-        const val = parseInt(this.value, 10);
-        S.options.viewDistance = isNaN(val) ? 1000 : val;
-        S.saveSettings();
-        S.updateVisibility();
-    });
-
-    $('.ps-view-lvl').on('change', function() {
-        const lvl = $(this).data('lvl');
-        S.options.viewLevels[lvl] = this.checked;
-        S.saveSettings();
-        S.updateVisibility();
     });
 
     $('#ps-link-names').on('change', function() { S.options.linkPortalNames = this.checked; S.saveSettings(); });
@@ -1007,7 +962,7 @@ function wrapper(plugin_info) {
 
         #portal-slayer-zoom-display {
           position: fixed;
-          bottom: 2px;
+          bottom: 20px;
           right: 2px;
           background: rgba(0,0,0,0.5);
           color: #FFF;
@@ -1089,8 +1044,9 @@ function wrapper(plugin_info) {
 }
 
 (function() {
-  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.9", "description": "Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。ズームレベル表示・ズーム別表示機能追加。" } };
+  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.10", "description": "Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。ズームレベル表示位置修正・描画距離設定削除。" } };
   var script = document.createElement('script');
   script.appendChild(document.createTextNode('(' + wrapper + ')(' + JSON.stringify(info) + ');'));
   (document.body || document.head || document.documentElement).appendChild(script);
 })();
+
