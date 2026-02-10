@@ -2,8 +2,8 @@
 // @author         You
 // @name           IITC plugin: PortalSlayer
 // @category       d.org.addon
-// @version        0.9.20
-// @description    [0.9.20] Faction-based Portal Counter
+// @version        0.9.21
+// @description    [0.9.21] Faction-based Portal Counter
 // @id             portal-slayer
 // @namespace      https://example.com/
 // @include        https://intel.ingress.com/*
@@ -1070,7 +1070,7 @@ function wrapper(plugin_info) {
 }
 
 (function() {
-  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.20", "description": "[0.9.20] Faction-based Portal Counter" } };
+  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.21", "description": "[0.9.21] Faction-based Portal Counter" } };
   var script = document.createElement('script');
   script.appendChild(document.createTextNode('(' + wrapper + ')(' + JSON.stringify(info) + ');'));
   (document.body || document.head || document.documentElement).appendChild(script);
