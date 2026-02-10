@@ -2,8 +2,8 @@
 // @author         You
 // @name           IITC plugin: PortalSlayer
 // @category       d.org.addon
-// @version        0.9.14
-// @description    [0.9.14] Expert Mode (God Eye), Request Throttling. Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。ズームレベル表示位置修正・描画距離設定削除。
+// @version        0.9.15
+// @description    [0.9.15] Expert Mode (God Eye), Request Throttling. Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。ズームレベル表示位置修正・描画距離設定削除。画面幅の距離表示追加。
 // @id             portal-slayer
 // @namespace      https://example.com/
 // @include        https://intel.ingress.com/*
@@ -1001,14 +1001,31 @@ function wrapper(plugin_info) {
         .appendTo('body');
     }
 
-    const updateZoom = function() {
+    const updateDisplay = function() {
        if (window.map) {
-         $('#portal-slayer-zoom-display').text('ZoomLv: ' + window.map.getZoom());
+         const zoom = window.map.getZoom();
+
+         // Calculate View Width
+         const bounds = window.map.getBounds();
+         const center = bounds.getCenter();
+         const west = L.latLng(center.lat, bounds.getWest());
+         const east = L.latLng(center.lat, bounds.getEast());
+         const dist = window.map.distance(west, east);
+
+         let distStr = '';
+         if (dist >= 1000) {
+           distStr = (dist / 1000).toFixed(1) + 'km';
+         } else {
+           distStr = Math.round(dist) + 'm';
+         }
+
+         $('#portal-slayer-zoom-display').text(`ZoomLv: ${zoom} (幅: ${distStr})`);
        }
     };
 
-    updateZoom();
-    window.map.on('zoomend', updateZoom);
+    updateDisplay();
+    window.map.on('zoomend', updateDisplay);
+    window.map.on('moveend', updateDisplay);
   };
 
   S.setupCSS = function() {
@@ -1069,6 +1086,7 @@ function wrapper(plugin_info) {
           pointer-events: none;
           z-index: 6000;
           font-family: monospace;
+          white-space: nowrap;
         }
 
         @media only screen and (max-width: 800px) {
@@ -1144,7 +1162,7 @@ function wrapper(plugin_info) {
 }
 
 (function() {
-  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.14", "description": "[0.9.14] Expert Mode (God Eye), Request Throttling. Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。ズームレベル表示位置修正・描画距離設定削除。" } };
+  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.15", "description": "[0.9.15] Expert Mode (God Eye), Request Throttling. Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。ズームレベル表示位置修正・描画距離設定削除。画面幅の距離表示追加。" } };
   var script = document.createElement('script');
   script.appendChild(document.createTextNode('(' + wrapper + ')(' + JSON.stringify(info) + ');'));
   (document.body || document.head || document.documentElement).appendChild(script);
