@@ -2,8 +2,8 @@
 // @author         You
 // @name           IITC plugin: PortalSlayer
 // @category       d.org.addon
-// @version        0.9.15
-// @description    [0.9.15] Expert Mode (God Eye), Request Throttling. Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。ズームレベル表示位置修正・描画距離設定削除。画面幅の距離表示追加。
+// @version        0.9.16
+// @description    [0.9.16] EXPERT FIX: Real Portal Filtering (Hide Game Portals by Zoom). Keep Markers Visible. Expert Mode (God Eye), Request Throttling. Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。
 // @id             portal-slayer
 // @namespace      https://example.com/
 // @include        https://intel.ingress.com/*
@@ -14,22 +14,10 @@
 /*
   [ Credits / Acknowledgments ]
   This plugin incorporates logic and design concepts from the following IITC plugins:
-
   1. IITC plugin: Portal Names
-     - Concept of displaying portal labels on the map.
-     - CSS styles for text labels (shadows, fonts) are based on its implementation.
-     - Note: This plugin implements a simplified version of labeling and does not include
-       the full collision detection logic of the original Portal Names.
-
   2. IITC plugin: Portal Audit / Portal Audit Mini
-     - Marker management infrastructure (Pane/Layer handling).
-     - Secure LocalStorage handling logic to prevent data corruption.
-
   3. IITC: FlipChecker
-     - Faction filtering logic (Enl/Res/Neutral detection).
-
   All credit for the original logic goes to their respective authors.
-  This plugin is an independent modification and is not supported by the original authors.
 */
 
 function wrapper(plugin_info) {
@@ -101,7 +89,6 @@ function wrapper(plugin_info) {
   // ============================================================
   S.applyExpertOverrides = function() {
     // 1. Data Zoom Override (God Eye)
-    // Monkey-patch window.getDataZoomForMapZoom
     if (S.options.expertDataZoomOffset !== 0) {
         if (!S.originalGetDataZoom) {
             S.originalGetDataZoom = window.getDataZoomForMapZoom;
@@ -333,8 +320,6 @@ function wrapper(plugin_info) {
     }
     // Update List View if open
     if ($('#portal-slayer-list-dialog').length > 0) {
-        // Simple refresh logic: re-open or remove row.
-        // For simplicity, remove row directly if possible
         $(`tr[data-guid="${guid}"]`).remove();
     }
   };
@@ -373,53 +358,79 @@ function wrapper(plugin_info) {
     }
   };
 
-  S.updateVisibility = function() {
-    if (!S.layerGroup) return;
-    if (!window.map) return;
+  // ============================================================
+  // [v0.9.16] Real Portal Filtering Logic
+  // ============================================================
 
+  // Helper: Check visibility logic for a given level and current zoom
+  S.shouldShowPortal = function(level, zoom) {
+      const conf = S.config[level];
+      if (!conf) return true; // Default to visible if no config
+
+      const minZ = (conf.minZoom !== undefined) ? conf.minZoom : 0;
+      const maxZ = (conf.maxZoom !== undefined) ? conf.maxZoom : 21;
+
+      if (zoom < minZ || zoom > maxZ) {
+          return false;
+      }
+      return true;
+  };
+
+  // Called on map zoom/move to filter ALL Game Portals
+  S.updateGamePortalVisibility = function() {
+    if (!window.map || !window.portals) return;
     const zoom = window.map.getZoom();
-    const guids = Object.keys(S.guidToLayer);
-    let hasVisible = false;
 
-    guids.forEach(guid => {
-        const marker = S.guidToLayer[guid];
-        const p = S.data.portals[guid];
-        if (!p) return;
+    for (const guid in window.portals) {
+        const p = window.portals[guid];
+        if (!p.options) continue;
 
-        // Visibility determined exclusively by Min/Max Zoom configuration
-        let isVisible = true; // Default to visible if no config or undefined range (e.g. user cleared inputs)
-
-        const conf = S.config[p.level];
-        if (conf) {
-            const minZ = conf.minZoom;
-            const maxZ = conf.maxZoom;
-            // If range is defined, check it.
-            if (minZ !== undefined && maxZ !== undefined && minZ !== null && maxZ !== null) {
-                if (zoom < minZ || zoom > maxZ) {
-                    isVisible = false;
-                }
-            }
+        let level = 0;
+        if (p.options.data && p.options.data.level) {
+            level = Math.floor(p.options.data.level);
+        } else if (p.options.level) {
+            level = p.options.level;
         }
 
-        if (isVisible) {
-            if (!S.layerGroup.hasLayer(marker)) {
-                S.layerGroup.addLayer(marker);
+        if (S.shouldShowPortal(level, zoom)) {
+            // Should be visible. Ensure it is on map.
+            // Note: We check if it's NOT on map before adding.
+            if (!window.map.hasLayer(p)) {
+                window.map.addLayer(p);
             }
-            hasVisible = true;
         } else {
-            if (S.layerGroup.hasLayer(marker)) {
-                S.layerGroup.removeLayer(marker);
+            // Should be hidden.
+            if (window.map.hasLayer(p)) {
+                window.map.removeLayer(p);
             }
-        }
-    });
-
-    // Ensure layer is on map if ANY marker is visible
-    if (hasVisible) {
-        if (!window.map.hasLayer(S.layerGroup)) {
-             window.map.addLayer(S.layerGroup);
         }
     }
   };
+
+  // Called when a new portal is added by IITC (e.g. while panning)
+  S.checkPortalVisibility = function(data) {
+    const p = data.portal;
+    const d = data.data; // portal details
+    const zoom = window.map.getZoom();
+
+    let level = 0;
+    if (d && d.level) {
+        level = Math.floor(d.level);
+    } else if (p.options && p.options.level) {
+        level = p.options.level;
+    }
+
+    if (!S.shouldShowPortal(level, zoom)) {
+         // Should be hidden.
+         // Use setTimeout because IITC might add it to the map immediately after this hook.
+         setTimeout(function() {
+             if (window.map.hasLayer(p)) {
+                 window.map.removeLayer(p);
+             }
+         }, 0);
+    }
+  };
+
 
   S.restoreAll = function() {
     if (!S.ensureInfra()) return;
@@ -435,12 +446,8 @@ function wrapper(plugin_info) {
         const guid = guids[i];
         const d = S.data.portals[guid];
 
-        // Filter by Current Area
-        // If data has no areaIndex (legacy/error), assume 0 (Area1) or show in all?
-        // Migration logic sets it to 0.
         const areaIdx = (d.areaIndex !== undefined) ? d.areaIndex : 0;
 
-        // Ensure robust comparison (handle string vs number)
         // eslint-disable-next-line eqeqeq
         if (areaIdx == S.data.currentArea) {
             if (d && d.lat && d.lng && d.color) {
@@ -460,7 +467,8 @@ function wrapper(plugin_info) {
         console.error('Slayer restoreAll error for item', e);
       }
     }
-    S.updateVisibility();
+    // Note: REMOVED call to S.updateVisibility() here.
+    // Plugin markers (▼) are always visible unless deleted.
   };
 
   // ============================================================
@@ -519,35 +527,6 @@ function wrapper(plugin_info) {
 
     if (level > 0 && S.config[level] && S.config[level].active) {
       const existing = S.data.portals ? S.data.portals[guid] : null;
-      // If it exists but in a DIFFERENT area, do we move it? Or duplicate?
-      // Logic: If it exists in CURRENT area, update. If not, add.
-      // If it exists in ANOTHER area, what happens?
-      // User requirement: "Switching area updates markers".
-      // It implies a portal can be in multiple areas? Or unique?
-      // "Check is selection type from menu screen" -> You select the active area.
-      // Usually, markers are unique per user-script unless specified.
-      // But if I want "Tokyo Station" in Area1 AND Area2, I'd need to switch to Area2 and tap it again.
-      // My data structure supports this (guid is key). Wait.
-      // If guid is key, a portal can only be in ONE area at a time.
-      // Refactoring consideration: S.data.portals[guid] = { ... areaIndex: 0 }.
-      // This means a portal can only belong to ONE area.
-      // If user wants same portal in multiple lists, I need a different structure (e.g. key by guid+area, or list of areas).
-      // Requirement: "Area1... Area5... separate management".
-      // "Check... selects current check area".
-      // Usually implies separate lists.
-      // If I move to Area2 and tap a portal already in Area1, should it move? Copy?
-      // Given "Area1, Area2...", it's likely distinct sets.
-      // If I use GUID as key, I can't have duplicates.
-      // Decision: Allow moving? Or just overwrite?
-      // Simple implementation: Overwrite (Move).
-      // If user wants it in both, they can't with `S.data.portals[guid]`.
-      // But for now, I'll stick to 1 portal = 1 area (last checked area).
-      // If they want to "Copy", they'd need a more complex UI.
-      // Let's assume 1 portal -> 1 area for simplicity unless specified "Multi-area per portal".
-      // Re-reading: "Marking management areas to be separated".
-      // If I tap in Area 1, it goes to Area 1.
-      // If I switch to Area 2 and tap same portal, it moves to Area 2?
-      // Probably yes.
 
       if (!existing || existing.level !== level || existing.color !== S.config[level].color || (title && !existing.title) || existing.areaIndex !== S.data.currentArea) {
         S.addPortal(guid, p.getLatLng(), level, S.config[level].color, title);
@@ -935,14 +914,14 @@ function wrapper(plugin_info) {
       const val = parseInt(this.value, 10);
       S.config[lvl].minZoom = isNaN(val) ? undefined : val;
       S.saveSettings();
-      S.updateVisibility();
+      S.updateGamePortalVisibility();
     });
     $('.ps-lvl-max').on('change', function() {
       const lvl = $(this).data('lvl');
       const val = parseInt(this.value, 10);
       S.config[lvl].maxZoom = isNaN(val) ? undefined : val;
       S.saveSettings();
-      S.updateVisibility();
+      S.updateGamePortalVisibility();
     });
 
     $('#ps-btn-delete-mode').on('click', function() {
@@ -1137,10 +1116,13 @@ function wrapper(plugin_info) {
           window.removeHook('portalSelected', S.onPortalSelected);
           window.addHook('portalSelected', S.onPortalSelected);
 
-          // Zoom End Hook to update visibility
+          // [0.9.16] New Hooks for Real Portal Filtering
           window.map.on('zoomend', function() {
-             S.updateVisibility();
+             S.updateGamePortalVisibility();
           });
+
+          // Check for newly added portals
+          window.addHook('portalAdded', S.checkPortalVisibility);
 
           S.setupZoomDisplay();
 
@@ -1162,7 +1144,7 @@ function wrapper(plugin_info) {
 }
 
 (function() {
-  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.15", "description": "[0.9.15] Expert Mode (God Eye), Request Throttling. Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。ズームレベル表示位置修正・描画距離設定削除。画面幅の距離表示追加。" } };
+  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.16", "description": "[0.9.16] EXPERT FIX: Real Portal Filtering (Hide Game Portals by Zoom). Keep Markers Visible. Expert Mode (God Eye), Request Throttling. Android向け。指定レベル・陣営のポータルをタップ時にマーカー(▼)付与。ポータル名強制表示対応。エリア管理・リスト表示機能追加。" } };
   var script = document.createElement('script');
   script.appendChild(document.createTextNode('(' + wrapper + ')(' + JSON.stringify(info) + ');'));
   (document.body || document.head || document.documentElement).appendChild(script);
