@@ -684,7 +684,7 @@ function wrapper(plugin_info) {
     const html = `
       <div class="portal-slayer-settings">
         <div class="ps-header">
-           <div style="font-weight:bold; color:#ddd; margin-bottom:4px;">エリア選択:</div>
+           <div style="font-weight:bold; color:#ddd; margin-bottom:4px;">▼マーカーを付けたいエリア選択:</div>
            ${areaTabs}
            ${renameControl}
 
@@ -720,7 +720,7 @@ function wrapper(plugin_info) {
         </div>
 
         <div class="ps-team-select">
-           <span style="font-weight:bold; margin-right:8px;">対象陣営:</span>
+           <span style="font-weight:bold; margin-right:8px;">マーカー対象の陣営とポータルLV:</span>
            <label class="ps-team-label enl"><input type="checkbox" id="ps-check-enl" ${S.config.processEnl ? 'checked' : ''}> Enl</label>
            <label class="ps-team-label res"><input type="checkbox" id="ps-check-res" ${S.config.processRes ? 'checked' : ''}> Res</label>
         </div>
