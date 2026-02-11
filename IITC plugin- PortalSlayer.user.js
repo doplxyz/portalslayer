@@ -30,11 +30,11 @@ function wrapper(plugin_info) {
   const COUNTER_UPDATE_INTERVAL = 3000; // ms
 
   const EXPERT_PRESETS = {
-     'lvl0': { name: 'Lv0-SAFEMODE',  offset: 0, parallel: 2, delay: 1000 },
+     'lvl0': { name: 'Lv0-SAFEMODE',  offset: 0, parallel: 3, delay: 900 },
      'lvl1': { name: 'LV1-DEFAULT',   offset: 0, parallel: 5, delay: 0   },
-     'lvl2': { name: 'LV2-SLAYER-MINI',  offset: 2, parallel: 2, delay: 800 },
-     'lvl3': { name: 'LV3-SLAYER-HIGH',  offset: 2, parallel: 4, delay: 0 },
-     'lvl4': { name: 'LV4-MURDERER',    offset: 3, parallel: 2, delay: 800 }
+     'lvl2': { name: 'LV2-SLAYER-MINI',  offset: 2, parallel: 3, delay: 900 },
+     'lvl3': { name: 'LV3-SLAYER-ULTRA',  offset: 2, parallel: 2, delay: 0 },
+     'lvl4': { name: 'LV4-MURDERER',    offset: 3, parallel: 3, delay: 900 }
    };
 
   if (typeof window.plugin !== 'function') window.plugin = function () {};
