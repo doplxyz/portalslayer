@@ -23,7 +23,6 @@
 function wrapper(plugin_info) {
   'use strict';
 
-  // --- Function 00000 Initialize Variables
   // --- USER CONFIGURABLE SETTINGS ---
   const UI_ZOOM_BOTTOM = '40px'; // Position of Zoom Display
   const UI_COUNTER_BOTTOM = '60px'; // Position of Portal Counter (Above Zoom)
@@ -96,7 +95,6 @@ function wrapper(plugin_info) {
   S.guidToLayer = {};
   S.originalGetDataZoom = null; // Store original function for monkey-patching
 
-  // --- Function 00010 Expert Mode Logic
   // ============================================================
   // Expert Mode Logic
   // ============================================================
@@ -133,7 +131,6 @@ function wrapper(plugin_info) {
   // ============================================================
   // ストレージ
   // ============================================================
-  // --- Function 00020 Load Settings
   S.loadSettings = function() {
     try {
       const c = localStorage.getItem(KEY_CONFIG);
@@ -166,7 +163,6 @@ function wrapper(plugin_info) {
     } catch(e) { console.error('Slayer loadSettings error', e); }
   };
 
-  // --- Function 00030 Load Data
   S.loadData = function() {
     try {
       if (S.options.clearOnReload) {
@@ -207,20 +203,17 @@ function wrapper(plugin_info) {
     }
   };
 
-  // --- Function 00040 Save Settings
   S.saveSettings = function() {
     localStorage.setItem(KEY_CONFIG, JSON.stringify(S.config));
     localStorage.setItem(KEY_OPTS, JSON.stringify(S.options));
   };
 
-  // --- Function 00050 Save Data
   S.saveData = function() {
     try {
       localStorage.setItem(KEY_DATA, JSON.stringify(S.data));
     } catch(e) { console.error('Slayer saveData error', e); }
   };
 
-  // --- Function 00060 Map and Marker Processing
   // ============================================================
   // マップ・マーカー処理
   // ============================================================
@@ -412,7 +405,6 @@ function wrapper(plugin_info) {
     }
   };
 
-  // --- Function 00070 Portal Names Hook
   // ============================================================
   // Portal Names 連携フック
   // ============================================================
@@ -439,7 +431,6 @@ function wrapper(plugin_info) {
     }
   };
 
-  // --- Function 00080 Interaction
   // ============================================================
   // インタラクション (ポータル選択時)
   // ============================================================
@@ -477,7 +468,6 @@ function wrapper(plugin_info) {
     }
   };
 
-  // --- Function 00090 UI and Settings
   // ============================================================
   // UI / 設定ダイアログ
   // ============================================================
@@ -877,7 +867,6 @@ function wrapper(plugin_info) {
     $('#toolbox').append('<a id="ps-toolbox-link" onclick="window.plugin.portalSlayer.openSettings();return false;">PortalSlayer</a>');
   }
 
-  // --- Function 00100 Setup Zoom Display
   S.setupZoomDisplay = function() {
     if ($('#portal-slayer-zoom-display').length === 0) {
       $('<div>')
@@ -912,7 +901,6 @@ function wrapper(plugin_info) {
     window.map.on('moveend', updateDisplay);
   };
 
-  // --- Function 00110 Setup Portal Counter
   S.setupPortalCounter = function() {
     if ($('#portal-slayer-counter').length === 0) {
       $('<div>')
@@ -951,7 +939,6 @@ function wrapper(plugin_info) {
     $('#portal-slayer-counter').html(`E-P8 : ${enlL8} / ${enlTotal}<br>R-P8 : ${resL8} / ${resTotal}`);
   };
 
-  // --- Function 00120 Setup CSS
   S.setupCSS = function() {
     if ($('#portal-slayer-css').length === 0) {
       $('<style>').prop('id', 'portal-slayer-css').prop('type', 'text/css').html(`
@@ -1040,7 +1027,6 @@ function wrapper(plugin_info) {
     }
   };
 
-  // --- Function 00130 Bootstrap
   // ============================================================
   // ブートストラップ
   // ============================================================
