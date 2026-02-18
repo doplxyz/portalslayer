@@ -27,14 +27,15 @@ function wrapper(plugin_info) {
   // --- USER CONFIGURABLE SETTINGS ---
   const UI_ZOOM_BOTTOM = '40px'; // Position of Zoom Display
   const UI_COUNTER_BOTTOM = '60px'; // Position of Portal Counter (Above Zoom)
-  const COUNTER_UPDATE_INTERVAL = 3000; // ms
+  const COUNTER_UPDATE_INTERVAL = 2000; // ms
 
   const EXPERT_PRESETS = {
      'lvl0': { name: 'Lv0-SAFEMODE',  offset: 0, parallel: 3, delay: 0 },
      'lvl1': { name: 'LV1-DEFAULT',   offset: 0, parallel: 5, delay: 0   },
      'lvl2': { name: 'LV2-SLAYER-MINI',  offset: 2, parallel: 2, delay: 0 },
-     'lvl3': { name: 'LV3-SLAYER-ULTRA',  offset: 2, parallel: 3, delay: 0 },
-     'lvl4': { name: 'LV4-MURDERER',    offset: 3, parallel: 2, delay: 0 }
+     'lvl3': { name: 'LV3-SLAYER-ULTRA',  offset: 2, parallel: 4, delay: 0 },
+     'lvl4': { name: 'LV4-MURDERER-MINI',    offset: 3, parallel: 2, delay: 0 }
+     'lvl5': { name: 'LV5-MURDERER-ULTRA',    offset: 3, parallel: 4, delay: 0 }
    };
 
   if (typeof window.plugin !== 'function') window.plugin = function () {};
