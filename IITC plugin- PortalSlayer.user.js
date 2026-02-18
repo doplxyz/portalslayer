@@ -34,7 +34,7 @@ function wrapper(plugin_info) {
      'lvl1': { name: 'LV1-DEFAULT',   offset: 0, parallel: 5, delay: 0   },
      'lvl2': { name: 'LV2-SLAYER-MINI',  offset: 2, parallel: 2, delay: 0 },
      'lvl3': { name: 'LV3-SLAYER-ULTRA',  offset: 2, parallel: 3, delay: 0 },
-     'lvl4': { name: 'LV4-MURDERER',    offset: 3, parallel: 3, delay: 0 }
+     'lvl4': { name: 'LV4-MURDERER',    offset: 3, parallel: 2, delay: 0 }
    };
 
   if (typeof window.plugin !== 'function') window.plugin = function () {};
@@ -1012,7 +1012,7 @@ function wrapper(plugin_info) {
            distStr = Math.round(dist) + 'm';
          }
 
-         $('#portal-slayer-zoom-display').text(`ZoomLv: ${zoom} (幅: ${distStr})`);
+         $('#portal-slayer-zoom-display').text(`ZoomLv : ${zoom} (横幅 : ${distStr})`);
        }
     };
 
