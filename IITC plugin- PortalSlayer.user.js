@@ -871,7 +871,7 @@ function wrapper(plugin_info) {
         </table>
         <div class="ps-controls">
           <div style="margin-bottom:8px; border-top:1px solid #444; padding-top:4px;">
-             <div style="font-weight:bold; color:#ddd; margin-bottom:4px;">タップ時の動作 [17]:</div>
+             <div style="font-weight:bold; color:#ddd; margin-bottom:4px;">タップ時の動作</div>
              <div style="display:flex; flex-direction:column; gap:4px;">
                <label><input type="radio" name="ps-tap-mode" value="none" ${S.options.tapMode === 'none' ? 'checked' : ''}> 何もしない</label>
                <label><input type="radio" name="ps-tap-mode" value="add" ${S.options.tapMode === 'add' ? 'checked' : ''}> マーカー付与のみ</label>
