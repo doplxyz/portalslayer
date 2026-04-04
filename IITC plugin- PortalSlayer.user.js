@@ -2,8 +2,8 @@
 // @author         DOPPELGENGER,GEMINI3PRO,JULES
 // @name           IITC plugin: PortalSlayer
 // @category       d.org.addon
-// @version        0.9.36
-// @description    [0.9.36] Exclude Machina from Bulk Add
+// @version        0.9.37
+// @description    [0.9.37] Add MACHINA to marker processing targets [19]
 // @id             portal-slayer
 // @namespace      https://example.com/
 // @include        https://intel.ingress.com/*
@@ -72,7 +72,8 @@ function wrapper(plugin_info) {
 
     // 陣営設定 (trueなら対象にする)
     processEnl: true,
-    processRes: true
+    processRes: true,
+    processMac: true
   };
 
   const DEFAULT_OPTS = {
@@ -556,6 +557,7 @@ function wrapper(plugin_info) {
     const team = p.options.team;
     if (team === window.TEAM_RES && !S.config.processRes) return;
     if (team === window.TEAM_ENL && !S.config.processEnl) return;
+    if (team === window.TEAM_MAC && !S.config.processMac) return;
     if (team === window.TEAM_NONE) {
         S.removePortal(guid);
         return;
@@ -851,6 +853,7 @@ function wrapper(plugin_info) {
            <span style="font-weight:bold; margin-right:8px;">マーカー対象の陣営とポータルLV:</span>
            <label class="ps-team-label enl"><input type="checkbox" id="ps-check-enl" ${S.config.processEnl ? 'checked' : ''}> Enl</label>
            <label class="ps-team-label res"><input type="checkbox" id="ps-check-res" ${S.config.processRes ? 'checked' : ''}> Res</label>
+           <label class="ps-team-label mac"><input type="checkbox" id="ps-check-mac" ${S.config.processMac ? 'checked' : ''}> Mac</label>
         </div>
 
         <table class="ps-level-table">
@@ -950,6 +953,7 @@ function wrapper(plugin_info) {
 
     $('#ps-check-enl').on('change', function() { S.config.processEnl = this.checked; S.saveSettings(); });
     $('#ps-check-res').on('change', function() { S.config.processRes = this.checked; S.saveSettings(); });
+    $('#ps-check-mac').on('change', function() { S.config.processMac = this.checked; S.saveSettings(); });
 
     $('.ps-lvl-check').on('change', function() {
       const lvl = $(this).data('lvl');
@@ -998,8 +1002,8 @@ function wrapper(plugin_info) {
             const team = p.options.team;
             if (team === window.TEAM_RES && !S.config.processRes) return;
             if (team === window.TEAM_ENL && !S.config.processEnl) return;
+            if (team === window.TEAM_MAC && !S.config.processMac) return;
             if (team === window.TEAM_NONE) return;
-            if (team === window.TEAM_MAC) return;
 
             const guid = p.options.guid;
             const level = Math.floor(p.options.data.level);
@@ -1171,6 +1175,7 @@ function wrapper(plugin_info) {
         .ps-team-label { margin-right: 12px; font-weight: bold; cursor: pointer; }
         .ps-team-label.enl { color: #03fe03; }
         .ps-team-label.res { color: #00c5ff; }
+        .ps-team-label.mac { color: #ff2020; }
 
         .ps-level-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
         .ps-level-table th { text-align: center; border-bottom: 1px solid #555; }
@@ -1278,7 +1283,7 @@ function wrapper(plugin_info) {
 }
 
 (function() {
-  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.36", "description": "[0.9.36] Exclude Machina from Bulk Add" } };
+  var info = { "script": { "name": "IITC plugin: PortalSlayer", "version": "0.9.37", "description": "[0.9.37] Add MACHINA to marker processing targets [19]" } };
   var script = document.createElement('script');
   script.appendChild(document.createTextNode('(' + wrapper + ')(' + JSON.stringify(info) + ');'));
   (document.body || document.head || document.documentElement).appendChild(script);
